@@ -1,12 +1,14 @@
+#include <Wire.h>
 #include <SoftwareSerial.h>
 #include "InputMode.h"
+#include "DS3231.h"
 
-int const latchPin = 10;
-int const clockPin = 9;
-int const dataPin = 11;
+int const clockPin = 10; // red wire to  RCLK / ST_CP
+int const latchPin = 11; // orange to SRCLK / SH_CP
+int const dataPin = 12; // yellow wire to SER / DS 
 
-const int blueRxPin = 2;
-const int blueTxPin = 3;
+const int blueRxPin = 8; // green wire
+const int blueTxPin = 9; // orange wire
 SoftwareSerial bluetooth(blueTxPin, blueRxPin);
 
 int const rowMask[] = {
@@ -27,19 +29,48 @@ InputMode inputMode = noInput;
 char inputChar;
 int inputNumber = 0;
 
+DS3231 Clock;
+bool isTwelveHour;
+bool isPM;
+bool isCenturyRollover;
+
+#define DEBUG 1
+
 void setup() {
-    pinMode(latchPin, OUTPUT);
-    pinMode(clockPin, OUTPUT);
-    pinMode(dataPin, OUTPUT);
-    digitalWrite(latchPin, LOW);
-    shiftOut(dataPin, clockPin, LSBFIRST, 0);
-    shiftOut(dataPin, clockPin, LSBFIRST, 0);
-    digitalWrite(latchPin, HIGH);
-    bluetooth.begin(9600);
+  pinMode(latchPin, OUTPUT);
+  pinMode(clockPin, OUTPUT);
+  pinMode(dataPin, OUTPUT);
+  digitalWrite(latchPin, LOW);
+  shiftOut(dataPin, clockPin, LSBFIRST, 0);
+  shiftOut(dataPin, clockPin, LSBFIRST, 0);
+  digitalWrite(latchPin, HIGH);
+  bluetooth.begin(9600);
+  Wire.begin();
+
+#if defined DEBUG  
+  Serial.begin(9600);
+#endif
+}
+
+void ReadDS3231()
+{
+  currentTimeSeconds = Clock.getSecond();
+  currentTimeMinutes = Clock.getMinute();
+  currentTimeHours = Clock.getHour(isTwelveHour, isPM);
+
+#if defined DEBUG
+  Serial.print("Time ");
+  Serial.print(currentTimeHours);
+  Serial.print(":");
+  Serial.print(currentTimeMinutes);
+  Serial.print(":");
+  Serial.println(currentTimeSeconds);
+#endif
 }
 
 void loop() {
-  if( bluetooth.available()) {
+  ReadDS3231();
+  while( bluetooth.available()) {
     inputChar = bluetooth.read();
     handleInput();
   }
@@ -86,9 +117,9 @@ void handleInput() {
         if(inputChar >= '0' && inputChar <= '9') {
           inputNumber = (inputNumber * 10) + (inputChar - '0');      
         } else if (inputChar == '.') {
-          currentTimeHours = changeTimeHours;
-          currentTimeMinutes = changeTimeMinutes;
-          currentTimeSeconds = inputNumber;
+          Clock.setSecond(inputNumber);
+          Clock.setMinute(changeTimeMinutes); 
+          Clock.setHour(changeTimeHours);
           changeInputMode(noInput);
         } else {
           changeInputMode(noInput);
@@ -120,12 +151,22 @@ void addValueToColorMask(int col, int val) {
 void setLeds(int row, int twoSevens, int nines, int threes, int ones) {
   blueGreen = 0;
   groundRed = rowMask[row];
-
   addValueToColorMask(0, twoSevens);
+  writeOut(blueGreen, groundRed);
+
+  blueGreen = 0;
+  groundRed = rowMask[row];
   addValueToColorMask(1, nines);
+  writeOut(blueGreen, groundRed);
+ 
+  blueGreen = 0;
+  groundRed = rowMask[row];
   addValueToColorMask(2, threes);
+  writeOut(blueGreen, groundRed);
+ 
+  blueGreen = 0;
+  groundRed = rowMask[row];
   addValueToColorMask(3, ones);
-  
   writeOut(blueGreen, groundRed);
 }
 
@@ -152,11 +193,5 @@ void writeOut(int gb, int rc)
     shiftOut(dataPin, clockPin, LSBFIRST, gb);
     shiftOut(dataPin, clockPin, LSBFIRST, rc);
     digitalWrite(latchPin, HIGH);
-//    delay(1);
-//    digitalWrite(latchPin, LOW);
-//    shiftOut(dataPin, clockPin, LSBFIRST, 0);
-//    shiftOut(dataPin, clockPin, LSBFIRST, B11100000);
-//    digitalWrite(latchPin, HIGH);
-//    delay(2);
 }  
 
