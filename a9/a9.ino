@@ -1,87 +1,36 @@
-#include <Stepper.h>
+#include <math.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_PCD8544.h>
+#include "hcsr04.h";
 
-const int buttonPin = 30;   
-const int ledPin = 28; 
-
-int ledState = HIGH;
-int buttonState;
-int lastButtonState = LOW;
-
-long lastDebounceTime = 0;
-long debounceDelay = 50;
-
-const int stepsPerRevolution = 2048;
-int stepperRpms = 15;
-int stepSize = 1;
-Stepper leftStepper(stepsPerRevolution, 23, 27, 25, 29);
-Stepper rightStepper(stepsPerRevolution, 47, 51, 49, 53);
+Adafruit_PCD8544 *display;
+HCSR04 *sonar;
+float distanceCm;
 
 void setup() {
-  pinMode(buttonPin, INPUT);
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, ledState);
-
-  leftStepper.setSpeed(stepperRpms);
-  rightStepper.setSpeed(stepperRpms);
+  setupDisplay();
+  sonar = new HCSR04(8, 9, 0);
 }
 
-void checkButton() {
-  int reading = digitalRead(buttonPin);
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
-  }
-
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading != buttonState) {
-      buttonState = reading;
-
-      if (buttonState == HIGH) {
-        ledState = !ledState;
-      }
-    }
-  }
-
-  digitalWrite(ledPin, ledState);
-  lastButtonState = reading;
-}
-
-int driveMode = 0;
-int driveStepTarget = 2048 * 5;
-int driveStep = 0;
-
-void drive() {
-  int leftStep = 0;
-  int rightStep = 0;
-
-  driveStep++;
-  if(0 == driveMode) { // straight
-    leftStep = -stepSize;
-    rightStep = stepSize;
-    if(driveStep == driveStepTarget) {
-      driveMode = 1;
-      driveStepTarget = 2048 / 4;
-      driveStep = 0;
-    }
-  }
-  
-  if (1 == driveMode) { // turn left
-    leftStep = stepSize;
-    rightStep = stepSize * 2;    
-    if(driveStep == driveStepTarget) {
-      driveMode = 0;
-      driveStepTarget = 2048 * 5;
-      driveStep = 0;
-    }
-  }
-  
-  leftStepper.step(leftStep);
-  rightStepper.step(rightStep);
+void setupDisplay() {
+  display = new Adafruit_PCD8544(7, 6, 5, 4, 3);
+  display->begin();
+  display->setContrast(30);
+  display->setTextSize(1);
+  display->setTextColor(BLACK);
 }
 
 void loop() {
-  checkButton();
-  if(HIGH == ledState) {
-    drive();
-  }
+  distanceCm = sonar->getDistanceCm();
+  loopDisplay();
+  delay(500);
+}
+
+void loopDisplay() {
+  display->clearDisplay();
+  display->setCursor((int)floor(distanceCm) % 50,18);
+  display->print("w00f!");
+  display->display();
 }
 
